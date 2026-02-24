@@ -1,4 +1,4 @@
-name: Run APK Downloader
+name: Run APK Downloader and Release
 
 on:
   push:
@@ -23,10 +23,25 @@ jobs:
     - name: Run APK Downloader
       run: python run.py
       
-    - name: Upload downloaded APKs
-      uses: actions/upload-artifact@v4
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        name: downloaded-apks
-        path: |
+        tag_name: apk-download-${{ github.run_number }}
+        release_name: APK Download Release ${{ github.run_number }}
+        draft: false
+        prerelease: false
+        
+    - name: Upload Release Assets
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: |
           app-*.apk
-        if-no-files-found: ignore
+        asset_name: |
+          app-*.apk
+        asset_content_type: application/vnd.android.package-archive
