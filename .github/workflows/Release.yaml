@@ -1,28 +1,36 @@
-name: Release Workflow
+name: Run Script on Push
+
 on:
   push:
-    tags:
-      - 'v*'  # 推送v开头的标签时触发
+    branches: [ main ]  # 仅当代码推送到main分支时触发
+
 jobs:
-  upload-release-asset:
+  run-script:
     runs-on: ubuntu-latest
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: /run.py
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+        
+    - name: Install dependencies
+      run: |
+        # 如果run.py需要额外的依赖，在这里安装
+        # pip install -r requirements.txt
+        echo "安装依赖完成"
+        
+    - name: Run Python Script
+      run: python run.py
+      
+    - name: Upload artifacts (optional)
+      uses: actions/upload-artifact@v3
+      with:
+        name: script-output
+        path: |
+          output/  # 假设脚本生成输出文件
+          logs/    # 假设有日志文件
+        if-no-files-found: ignore
