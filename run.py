@@ -12,8 +12,8 @@ from datetime import datetime
 # 配置 - 针对 GitHub Actions 优化
 BASE_URL = "http://jinshan2.resource.zhibaowan.com/downbag2/XT/2017/app/app-%s.apk"
 DOWNLOAD_DIR = os.getenv('GITHUB_WORKSPACE', os.getcwd())  # 使用GitHub工作区或当前目录
-START_NUM = 7000
-END_NUM = 8000
+START_NUM = 8000
+END_NUM = 8600
 TOTAL_FILES = END_NUM - START_NUM + 1
 MAX_WORKERS = 2
 
