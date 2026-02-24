@@ -51,3 +51,22 @@ jobs:
           运行ID: ${{ github.run_id }}
         draft: false
         prerelease: false
+        - name: Upload Release Assets (Individual Files)
+      if: always()
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        UPLOAD_URL: ${{ steps.create_release.outputs.upload_url }}
+      run: |
+        # 遍历当前目录下所有 app-*.apk 文件
+        for file in app-*.apk; do
+          if [ -f "$file" ]; then
+            echo "📤 正在上传: $file"
+            # 使用 curl 命令逐个上传
+            curl -X POST \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Content-Type: application/octet-stream" \
+              --data-binary @"$file" \
+              "$UPLOAD_URL?name=$file"
+            echo ""
+          fi
+        done
