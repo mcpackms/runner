@@ -41,7 +41,6 @@ jobs:
       if: always()
       uses: actions/create-release@v1
       env:
-        # 👇 这一行是关键：把Token传给Action
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: apk-download-${{ github.run_id }}
@@ -51,7 +50,9 @@ jobs:
           运行ID: ${{ github.run_id }}
         draft: false
         prerelease: false
-        - name: Upload Release Assets (Individual Files)
+
+    # 👇 注意：这一行必须与上面的 "- name: Create Release" 对齐
+    - name: Upload Release Assets (Individual Files)
       if: always()
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
