@@ -63,12 +63,8 @@ jobs:
           # 查找所有 APK 文件，并输出为 JSON 数组格式，以便后续矩阵使用
           # 如果没有找到文件，输出空数组 []
           if ls app-*.apk 1>/dev/null 2>&1; then
-            # 使用 Python 生成 JSON 格式，避免依赖 jq
-            files=$(python3 -c "
-            import os, json
-            apk_files = [f for f in os.listdir('.') if f.startswith('app-') and f.endswith('.apk')]
-            print(json.dumps(apk_files))
-            ")
+            # 使用Python生成JSON格式，避免依赖jq（单行模式）
+            files=$(python3 -c "import os, json; apk_files = [f for f in os.listdir('.') if f.startswith('app-') and f.endswith('.apk')]; print(json.dumps(apk_files))")
           else
             files="[]"
           fi
