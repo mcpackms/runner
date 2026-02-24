@@ -8,11 +8,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import random
 import sys
 
-# 配置
+# 配置 - 针对 GitHub Actions 优化
 BASE_URL = "http://jinshan2.resource.zhibaowan.com/downbag2/XT/2017/app/app-%s.apk"
-DOWNLOAD_DIR = os.getenv('GITHUB_WORKSPACE', '/tmp/downloads')  # 使用GitHub工作区或临时目录
-TOTAL_FILES = 10000
-MAX_WORKERS = 100  # 提高并发数到100
+DOWNLOAD_DIR = os.getenv('GITHUB_WORKSPACE', os.getcwd())  # 使用GitHub工作区或当前目录
+TOTAL_FILES = 10000  # 测试用少量文件，生产环境可改为10000
+MAX_WORKERS = 2    # 降低并发避免被封IP
 
 class APKDownloader:
     def __init__(self):
@@ -35,8 +35,7 @@ class APKDownloader:
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
             'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15'
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0'
         ]
         
         # 设置通用headers
@@ -60,8 +59,8 @@ class APKDownloader:
         """检查URL是否有效 - 使用更真实的请求"""
         url = BASE_URL % num
         
-        # GitHub Actions环境需要更长的延迟避免被封IP
-        time.sleep(random.uniform(0.05, 0.1))
+        # GitHub Actions 需要更长延迟避免被封IP
+        time.sleep(random.uniform(0.2, 0.5))
         
         # 轮换User-Agent
         self.session.headers.update({
@@ -72,7 +71,7 @@ class APKDownloader:
             # 先尝试HEAD请求（更轻量）
             head_response = self.session.head(
                 url,
-                timeout=15,  # 增加超时时间
+                timeout=20,  # 增加超时时间
                 allow_redirects=True
             )
             
@@ -86,7 +85,7 @@ class APKDownloader:
                 get_response = self.session.get(
                     url,
                     stream=True,
-                    timeout=20,
+                    timeout=25,
                     headers={
                         'Range': 'bytes=0-1023'  # 只请求前1024字节
                     }
@@ -116,7 +115,7 @@ class APKDownloader:
                 get_response = self.session.get(
                     url,
                     stream=True,
-                    timeout=25,
+                    timeout=30,
                     headers={
                         'Range': 'bytes=0-1023'
                     }
@@ -168,7 +167,7 @@ class APKDownloader:
         max_retries = 3
         for retry in range(max_retries):
             try:
-                # GitHub Actions环境需要更长延迟
+                # GitHub Actions 需要更长延迟
                 time.sleep(random.uniform(2, 4))
                 
                 # 轮换User-Agent
@@ -269,7 +268,7 @@ class APKDownloader:
                 self.checked += 1
                 
                 # 显示进度
-                if i % 100 == 0:  # 每100个显示一次进度
+                if i % 20 == 0:  # 减少日志输出频率
                     percent = i * 100 // TOTAL_FILES
                     found_count = len(self.found_urls)
                     print(f"扫描进度: {percent}% ({i}/{TOTAL_FILES}) - 已发现: {found_count}")
@@ -278,7 +277,7 @@ class APKDownloader:
                 if result['valid']:
                     self.found_urls.append(result)
                     method = result.get('method', 'unknown')
-                    print(f"\n✨ 发现有效: app-{result['num']}.apk ({result['size']} bytes) [方法:{method}]")
+                    print(f"✨ 发现有效: app-{result['num']}.apk ({result['size']} bytes) [方法:{method}]")
         
         # 扫描完成
         scan_time = time.time() - start_time
@@ -314,7 +313,7 @@ class APKDownloader:
         if to_download:
             print("\n开始下载新文件...")
             for i, item in enumerate(to_download, 1):
-                print(f"\n[{i}/{len(to_download)}] ", end='')
+                print(f"[{i}/{len(to_download)}] ", end='')
                 success = self.download_file(item['num'], item['url'])
                 if success:
                     self.downloaded_files.append(f"app-{item['num']}.apk")

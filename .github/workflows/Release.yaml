@@ -1,11 +1,11 @@
-name: Run Python Script on Push
+name: Run APK Downloader
 
 on:
   push:
-    branches: [ main ]  # 仅在推送到main分支时触发
+    branches: [ main ]
 
 jobs:
-  run-script:
+  run-downloader:
     runs-on: ubuntu-latest
     
     steps:
@@ -15,23 +15,18 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.10'  # 指定一个稳定的Python版本
+        python-version: '3.10'
         
     - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install requests
-        # 如果需要其他库，在这里继续添加
-        # pip install pandas numpy
-        
-    - name: Run Python Script
+      run: pip install requests
+      
+    - name: Run APK Downloader
       run: python run.py
       
-    - name: Upload artifacts
+    - name: Upload downloaded APKs
       uses: actions/upload-artifact@v4
       with:
-        name: script-output
+        name: downloaded-apks
         path: |
-          output/
-          logs/
+          app-*.apk
         if-no-files-found: ignore
