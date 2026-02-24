@@ -38,10 +38,13 @@ jobs:
         retention-days: 1  # 缩短artifact保留时间
     
     - name: Create Release
-      if: always()  # 即使前序步骤失败也尝试创建Release
+      if: always()
       uses: actions/create-release@v1
+      env:
+        # 👇 这一行是关键：把Token传给Action
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: apk-download-${{ github.run_id }}  # 使用唯一ID避免Tag冲突
+        tag_name: apk-download-${{ github.run_id }}
         release_name: APK Download Run ${{ github.run_id }}
         body: |
           自动生成的APK下载结果
