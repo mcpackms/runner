@@ -5,10 +5,15 @@ on:
     branches: [ main ]
 
 jobs:
-  # 第一个 Job：负责下载 APK
+  # 第一个 Job：负责下载 APK 并创建 Release
   run-downloader:
     runs-on: ubuntu-latest
     timeout-minutes: 360
+
+    # 定义该 Job 的输出变量，供后续 Job 使用
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      apk_files: ${{ steps.find_apks.outputs.files }}
 
     permissions:
       contents: write
@@ -55,24 +60,29 @@ jobs:
       - name: Find APK Files
         id: find_apks
         run: |
-          # 查找所有 APK 文件，并用逗号分隔，输出给下一步使用
-          files=$(ls app-*.apk 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+          # 查找所有 APK 文件，并输出为 JSON 数组格式，以便后续矩阵使用
+          # 如果没有找到文件，输出空数组 []
+          if ls app-*.apk 1>/dev/null 2>&1; then
+            files=$(ls app-*.apk | jq -R -s -c 'split("\n") | map(select(. != ""))')
+          else
+            files="[]"
+          fi
           echo "files=$files" >> $GITHUB_OUTPUT
+          echo "Found APK files: $files"
 
-  # 第二个 Job：负责上传 Release Assets
-  # 注意：这里把 strategy 放在了 job 的顶层
+  # 第二个 Job：负责并行上传 Release Assets
   upload_assets:
     runs-on: ubuntu-latest
-    # 这里是关键修改：strategy 必须在这里
+    needs: run-downloader  # 依赖上一个 Job，确保顺序执行和数据传递
+
+    # 关键修正：使用 matrix 策略并行上传，并通过 needs 获取上游输出
     strategy:
+      # 使用 fromJSON 将字符串解析为数组，动态生成矩阵
       matrix:
-        file: ${{ fromJSON(format('["{0}"]', steps.find_apks.outputs.files)) }}
-    
-    # 需要依赖上一个 Job，因为要用到它的输出
-    needs: run-downloader
+        file: ${{ fromJSON(needs.run-downloader.outputs.apk_files) }}
 
     steps:
-      - name: Download APKs
+      - name: Download APKs from Artifact
         uses: actions/download-artifact@v4
         with:
           name: downloaded-apks
@@ -84,11 +94,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          # 引用上一步创建 Release 的输出 URL
+          # 引用上游 Job 创建的 Release 的上传 URL
           upload_url: ${{ needs.run-downloader.outputs.upload_url }}
-          # 这里指定要上传的单个文件路径
+          # 矩阵变量 file 代表当前并行实例处理的单个文件名
           asset_path: ${{ matrix.file }}
-          # 保持原文件名
           asset_name: ${{ matrix.file }}
-          # 设置 MIME 类型为二进制流
           asset_content_type: application/octet-stream
