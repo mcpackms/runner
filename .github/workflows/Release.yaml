@@ -38,6 +38,7 @@ jobs:
         retention-days: 1  # 缩短artifact保留时间
     
     - name: Create Release
+      id: create_release
       if: always()
       uses: actions/create-release@v1
       env:
@@ -51,23 +52,31 @@ jobs:
         draft: false
         prerelease: false
 
-    # 👇 注意：这一行必须与上面的 "- name: Create Release" 对齐
-    - name: Upload Release Assets (Individual Files)
-      if: always()
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        UPLOAD_URL: ${{ steps.create_release.outputs.upload_url }}
+    - name: Find APK Files
+      id: find_apks
       run: |
-        # 遍历当前目录下所有 app-*.apk 文件
-        for file in app-*.apk; do
-          if [ -f "$file" ]; then
-            echo "📤 正在上传: $file"
-            # 使用 curl 命令逐个上传
-            curl -X POST \
-              -H "Authorization: token $GITHUB_TOKEN" \
-              -H "Content-Type: application/octet-stream" \
-              --data-binary @"$file" \
-              "$UPLOAD_URL?name=$file"
-            echo ""
-          fi
-        done
+        # 查找所有 APK 文件，并用逗号分隔，输出给下一步使用
+        files=$(ls app-*.apk 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+        echo "files=$files" >> $GITHUB_OUTPUT
+
+    - name: Upload Release Assets (Standard API)
+      if: always()
+      # 使用官方的上传资产 Action
+      uses: actions/upload-release-asset@v1
+      env:
+        # 必须传递 Token
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        # 引用上一步创建 Release 的输出 URL
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        # 这里指定要上传的单个文件路径
+        # 注意：这个 Action 一次只能传一个文件，所以我们用循环包裹它
+        asset_path: ${{ matrix.file }}
+        # 保持原文件名
+        asset_name: ${{ matrix.file }}
+        # 设置 MIME 类型为二进制流
+        asset_content_type: application/octet-stream
+      # 使用矩阵策略来遍历所有 APK 文件
+      strategy:
+        matrix:
+          file: ${{ fromJSON(format('["{0}"]', steps.find_apks.outputs.files)) }}
