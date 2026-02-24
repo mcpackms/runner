@@ -14,8 +14,8 @@ BASE_URL = "http://jinshan2.resource.zhibaowan.com/downbag2/XT/2017/app/app-%s.a
 DOWNLOAD_DIR = os.getenv('GITHUB_WORKSPACE', os.getcwd())  # 使用GitHub工作区或当前目录
 START_NUM = 8000
 END_NUM = 8600
-TOTAL_FILES = END_NUM - START_NUM + 1
-MAX_WORKERS = 2
+TOTAL_FILES = END_NUM - START_NUM + 10
+MAX_WORKERS = 4
 
 def get_timestamp():
     """获取带时间戳的日志前缀"""
