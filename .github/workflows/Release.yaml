@@ -1,4 +1,4 @@
-name: Run APK Downloader and Release
+name: Run APK Downloader
 
 on:
   push:
@@ -7,6 +7,11 @@ on:
 jobs:
   run-downloader:
     runs-on: ubuntu-latest
+    timeout-minutes: 360  # 设置6小时超时保护
+    
+    # 添加权限配置，允许创建Release
+    permissions:
+      contents: write
     
     steps:
     - name: Checkout code
@@ -18,30 +23,28 @@ jobs:
         python-version: '3.10'
         
     - name: Install dependencies
-      run: pip install requests
+      run: pip install --no-cache-dir requests  # 禁用pip缓存减少磁盘占用
       
     - name: Run APK Downloader
       run: python run.py
       
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Upload downloaded APKs
+      uses: actions/upload-artifact@v4
       with:
-        tag_name: apk-download-${{ github.run_number }}
-        release_name: APK Download Release ${{ github.run_number }}
+        name: downloaded-apks
+        path: |
+          app-*.apk
+        if-no-files-found: ignore
+        retention-days: 1  # 缩短artifact保留时间
+    
+    - name: Create Release
+      if: always()  # 即使前序步骤失败也尝试创建Release
+      uses: actions/create-release@v1
+      with:
+        tag_name: apk-download-${{ github.run_id }}  # 使用唯一ID避免Tag冲突
+        release_name: APK Download Run ${{ github.run_id }}
+        body: |
+          自动生成的APK下载结果
+          运行ID: ${{ github.run_id }}
         draft: false
         prerelease: false
-        
-    - name: Upload Release Assets
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: |
-          app-*.apk
-        asset_name: |
-          app-*.apk
-        asset_content_type: application/vnd.android.package-archive
