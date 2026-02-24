@@ -5,78 +5,90 @@ on:
     branches: [ main ]
 
 jobs:
+  # 第一个 Job：负责下载 APK
   run-downloader:
     runs-on: ubuntu-latest
-    timeout-minutes: 360  # 设置6小时超时保护
-    
-    # 添加权限配置，允许创建Release
+    timeout-minutes: 360
+
     permissions:
       contents: write
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
-        
-    - name: Install dependencies
-      run: pip install --no-cache-dir requests  # 禁用pip缓存减少磁盘占用
-      
-    - name: Run APK Downloader
-      run: python run.py
-      
-    - name: Upload downloaded APKs
-      uses: actions/upload-artifact@v4
-      with:
-        name: downloaded-apks
-        path: |
-          app-*.apk
-        if-no-files-found: ignore
-        retention-days: 1  # 缩短artifact保留时间
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install --no-cache-dir requests
+
+      - name: Run APK Downloader
+        run: python run.py
+
+      - name: Upload downloaded APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: downloaded-apks
+          path: |
+            app-*.apk
+          if-no-files-found: ignore
+          retention-days: 1
+
+      - name: Create Release
+        id: create_release
+        if: always()
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: apk-download-${{ github.run_id }}
+          release_name: APK Download Run ${{ github.run_id }}
+          body: |
+            自动生成的APK下载结果
+            运行ID: ${{ github.run_id }}
+          draft: false
+          prerelease: false
+
+      - name: Find APK Files
+        id: find_apks
+        run: |
+          # 查找所有 APK 文件，并用逗号分隔，输出给下一步使用
+          files=$(ls app-*.apk 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+          echo "files=$files" >> $GITHUB_OUTPUT
+
+  # 第二个 Job：负责上传 Release Assets
+  # 注意：这里把 strategy 放在了 job 的顶层
+  upload_assets:
+    runs-on: ubuntu-latest
+    # 这里是关键修改：strategy 必须在这里
+    strategy:
+      matrix:
+        file: ${{ fromJSON(format('["{0}"]', steps.find_apks.outputs.files)) }}
     
-    - name: Create Release
-      id: create_release
-      if: always()
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: apk-download-${{ github.run_id }}
-        release_name: APK Download Run ${{ github.run_id }}
-        body: |
-          自动生成的APK下载结果
-          运行ID: ${{ github.run_id }}
-        draft: false
-        prerelease: false
+    # 需要依赖上一个 Job，因为要用到它的输出
+    needs: run-downloader
 
-    - name: Find APK Files
-      id: find_apks
-      run: |
-        # 查找所有 APK 文件，并用逗号分隔，输出给下一步使用
-        files=$(ls app-*.apk 2>/dev/null | tr '\n' ',' | sed 's/,$//')
-        echo "files=$files" >> $GITHUB_OUTPUT
+    steps:
+      - name: Download APKs
+        uses: actions/download-artifact@v4
+        with:
+          name: downloaded-apks
+          path: .
 
-    - name: Upload Release Assets (Standard API)
-      if: always()
-      # 使用官方的上传资产 Action
-      uses: actions/upload-release-asset@v1
-      env:
-        # 必须传递 Token
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        # 引用上一步创建 Release 的输出 URL
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        # 这里指定要上传的单个文件路径
-        # 注意：这个 Action 一次只能传一个文件，所以我们用循环包裹它
-        asset_path: ${{ matrix.file }}
-        # 保持原文件名
-        asset_name: ${{ matrix.file }}
-        # 设置 MIME 类型为二进制流
-        asset_content_type: application/octet-stream
-      # 使用矩阵策略来遍历所有 APK 文件
-      strategy:
-        matrix:
-          file: ${{ fromJSON(format('["{0}"]', steps.find_apks.outputs.files)) }}
+      - name: Upload Release Assets (Standard API)
+        if: always()
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # 引用上一步创建 Release 的输出 URL
+          upload_url: ${{ needs.run-downloader.outputs.upload_url }}
+          # 这里指定要上传的单个文件路径
+          asset_path: ${{ matrix.file }}
+          # 保持原文件名
+          asset_name: ${{ matrix.file }}
+          # 设置 MIME 类型为二进制流
+          asset_content_type: application/octet-stream
