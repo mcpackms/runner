@@ -60,23 +60,21 @@ jobs:
       - name: Find APK Files
         id: find_apks
         run: |
-          # 查找所有 APK 文件，并输出为 JSON 数组格式，以便后续矩阵使用
-          # 如果没有找到文件，输出空数组 []
           if ls app-*.apk 1>/dev/null 2>&1; then
-            # 使用Python生成JSON格式，避免依赖jq（单行模式）
             files=$(python3 -c "import os, json; apk_files = [f for f in os.listdir('.') if f.startswith('app-') and f.endswith('.apk')]; print(json.dumps(apk_files))")
+            echo "files=$files" >> $GITHUB_OUTPUT
           else
-            files="[]"
+            echo "files=[]" >> $GITHUB_OUTPUT
           fi
-          echo "files=$files" >> $GITHUB_OUTPUT
-          echo "Found APK files: $files"
+          echo "Found APK files: ${{ steps.find_apks.outputs.files }}"
 
   # 第二个 Job：负责并行上传 Release Assets
   upload_assets:
     runs-on: ubuntu-latest
-    needs: run-downloader  # 依赖上一个 Job，确保顺序执行和数据传递
+    needs: run-downloader
+    if: fromJSON(needs.run-downloader.outputs.apk_files) != []
     permissions:
-      contents: write  # 关键修复：授予上传权限
+      contents: write
 
     # 使用 matrix 策略并行上传
     strategy:
