@@ -8,18 +8,135 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import random
 import sys
 from datetime import datetime
+import json
 
 # 配置 - 针对 GitHub Actions 优化
 BASE_URL = "http://jinshan2.resource.zhibaowan.com/downbag2/XT/2017/app/app-%s.apk"
-DOWNLOAD_DIR = os.getenv('GITHUB_WORKSPACE', os.getcwd())  # 使用GitHub工作区或当前目录
+DOWNLOAD_DIR = os.getenv('GITHUB_WORKSPACE', os.getcwd())
 START_NUM = 7500
 END_NUM = 7990
 TOTAL_FILES = END_NUM - START_NUM + 10
 MAX_WORKERS = 4
 
+# 代理配置
+PROXY_API_URL = "https://proxy.scdn.io/api/get_proxy.php?protocol=http&count=1"
+PROXY_MAX_USES = 10
+PROXY_TEST_URL = "http://httpbin.org/ip"
+PROXY_TEST_TIMEOUT = 10
+
 def get_timestamp():
     """获取带时间戳的日志前缀"""
     return f"[{datetime.now().strftime('%H:%M:%S')}]"
+
+
+class ProxyManager:
+    """代理管理器 - 轮换代理，每个代理使用指定次数"""
+    
+    def __init__(self):
+        self.current_proxy = None
+        self.use_count = 0
+        self.proxy_list = []
+        self.session = requests.Session()
+        
+    def get_proxies(self):
+        """从API获取代理列表"""
+        try:
+            print(f"{get_timestamp()} 🔄 正在获取代理...")
+            response = self.session.get(
+                PROXY_API_URL,
+                timeout=30,
+                headers={
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                }
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            proxies = []
+            
+            if isinstance(data, list):
+                proxies = data
+            elif isinstance(data, dict):
+                if 'data' in data and isinstance(data['data'], list):
+                    proxies = [p.get('proxy') or p.get('ip') or p.get('address') for p in data['data']]
+                elif 'proxy' in data:
+                    proxies = [data['proxy']]
+                elif 'proxies' in data:
+                    proxies = data['proxies']
+            
+            proxies = [p for p in proxies if p]
+            
+            if proxies:
+                print(f"{get_timestamp()} ✅ 获取到 {len(proxies)} 个代理")
+                return proxies
+            else:
+                print(f"{get_timestamp()} ⚠️ API返回为空，使用直接连接")
+                return []
+                
+        except Exception as e:
+            print(f"{get_timestamp()} ❌ 获取代理失败: {e}，使用直接连接")
+            return []
+    
+    def test_proxy(self, proxy):
+        """测试代理是否可用"""
+        try:
+            proxies = {
+                'http': f'http://{proxy}',
+                'https': f'http://{proxy}'
+            }
+            resp = self.session.get(
+                PROXY_TEST_URL,
+                proxies=proxies,
+                timeout=PROXY_TEST_TIMEOUT
+            )
+            if resp.status_code == 200:
+                print(f"{get_timestamp()} ✅ 代理可用: {proxy}")
+                return True
+        except Exception as e:
+            print(f"{get_timestamp()} ❌ 代理测试失败: {proxy} - {e}")
+        return False
+    
+    def get_next_proxy(self):
+        """获取下一个代理"""
+        self.use_count = 0
+        
+        if not self.proxy_list:
+            self.proxy_list = self.get_proxies()
+            if not self.proxy_list:
+                return None
+        
+        for proxy in self.proxy_list:
+            if self.test_proxy(proxy):
+                self.current_proxy = proxy
+                return proxy
+        
+        print(f"{get_timestamp()} ⚠️ 所有代理测试失败，重新获取...")
+        self.proxy_list = self.get_proxies()
+        if not self.proxy_list:
+            return None
+        
+        for proxy in self.proxy_list:
+            if self.test_proxy(proxy):
+                self.current_proxy = proxy
+                return proxy
+        
+        return None
+    
+    def get_proxy(self):
+        """获取当前使用的代理，如果达到使用次数限制则切换"""
+        if self.use_count >= PROXY_MAX_USES:
+            print(f"{get_timestamp()} 🔄 代理 {self.current_proxy} 已使用 {PROXY_MAX_USES} 次，切换新代理...")
+            return self.get_next_proxy()
+        
+        if self.current_proxy is None:
+            return self.get_next_proxy()
+        
+        return self.current_proxy
+    
+    def record_use(self):
+        """记录一次代理使用"""
+        self.use_count += 1
+        print(f"{get_timestamp()} 📊 代理使用计数: {self.current_proxy} ({self.use_count}/{PROXY_MAX_USES})")
 
 class APKDownloader:
     def __init__(self):
@@ -27,16 +144,14 @@ class APKDownloader:
         self.found_urls = []
         self.downloaded_files = []
         self.checked = 0
+        self.proxy_manager = ProxyManager()
         
-        # 创建下载目录
         os.makedirs(self.download_dir, exist_ok=True)
         print(f"{get_timestamp()} 目标目录: {self.download_dir}")
         print(f"{get_timestamp()} 当前工作目录: {os.getcwd()}")
         
-        # 设置session，模拟真实浏览器
         self.session = requests.Session()
         
-        # 轮换User-Agent
         self.user_agents = [
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
@@ -45,7 +160,6 @@ class APKDownloader:
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0'
         ]
         
-        # 设置通用headers
         self.update_headers()
     
     def update_headers(self):
@@ -66,20 +180,27 @@ class APKDownloader:
         """检查URL是否有效 - 使用更真实的请求"""
         url = BASE_URL % num
         
-        # GitHub Actions 需要更长延迟避免被封IP
         time.sleep(random.uniform(0.2, 0.5))
         
-        # 轮换User-Agent
         self.session.headers.update({
             'User-Agent': random.choice(self.user_agents)
         })
         
+        proxy = self.proxy_manager.get_proxy()
+        proxies = None
+        if proxy:
+            proxies = {
+                'http': f'http://{proxy}',
+                'https': f'http://{proxy}'
+            }
+            self.proxy_manager.record_use()
+        
         try:
-            # 先尝试HEAD请求（更轻量）
             head_response = self.session.head(
                 url,
-                timeout=20,  # 增加超时时间
-                allow_redirects=True
+                timeout=20,
+                allow_redirects=True,
+                proxies=proxies
             )
             
             # 检查状态码
@@ -166,32 +287,37 @@ class APKDownloader:
         filename = f"app-{num}.apk"
         filepath = os.path.join(self.download_dir, filename)
         
-        # 如果文件已存在，验证大小
         if os.path.exists(filepath):
             size = os.path.getsize(filepath)
             print(f"{get_timestamp()} ⏺ 已存在: {filename} ({size} bytes)")
             return True
         
-        # 下载重试机制
         max_retries = 3
         for retry in range(max_retries):
             try:
-                # GitHub Actions 需要更长延迟
                 time.sleep(random.uniform(2, 4))
                 
-                # 轮换User-Agent
                 self.session.headers.update({
                     'User-Agent': random.choice(self.user_agents)
                 })
                 
+                proxy = self.proxy_manager.get_proxy()
+                proxies = None
+                if proxy:
+                    proxies = {
+                        'http': f'http://{proxy}',
+                        'https': f'http://{proxy}'
+                    }
+                    self.proxy_manager.record_use()
+                
                 print(f"{get_timestamp()} ⬇️ 下载中: {filename} (尝试 {retry + 1}/{max_retries})")
                 
-                # 下载完整文件
                 response = self.session.get(
                     url,
                     stream=True,
-                    timeout=120,  # 增加超时时间
-                    allow_redirects=True
+                    timeout=120,
+                    allow_redirects=True,
+                    proxies=proxies
                 )
                 
                 if response.status_code == 200:
