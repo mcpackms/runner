@@ -54,20 +54,20 @@ class ProxyManager:
             
             proxies = []
             
-            if isinstance(data, list):
-                proxies = data
-            elif isinstance(data, dict):
-                if 'data' in data and isinstance(data['data'], list):
-                    proxies = [p.get('proxy') or p.get('ip') or p.get('address') for p in data['data']]
-                elif 'proxy' in data:
-                    proxies = [data['proxy']]
+            if isinstance(data, dict):
+                if 'data' in data and isinstance(data['data'], dict):
+                    proxies = data['data'].get('proxies', [])
                 elif 'proxies' in data:
                     proxies = data['proxies']
+                elif 'proxy' in data:
+                    proxies = [data['proxy']]
+            elif isinstance(data, list):
+                proxies = data
             
             proxies = [p for p in proxies if p]
             
             if proxies:
-                print(f"{get_timestamp()} ✅ 获取到 {len(proxies)} 个代理")
+                print(f"{get_timestamp()} ✅ 获取到 {len(proxies)} 个代理: {proxies}")
                 return proxies
             else:
                 print(f"{get_timestamp()} ⚠️ API返回为空，使用直接连接")
