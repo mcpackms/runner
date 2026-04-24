@@ -1,76 +1,38 @@
-name: Build and Release
+name: Build
 
 on:
   push:
-    branches: [ main, master ]
-    tags:
-      - 'v*'
+    branches: [ main ]
   pull_request:
-    branches: [ main, master ]
-  workflow_dispatch:
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    outputs:
-      artifact-name: ${{ steps.set-name.outputs.artifact-name }}
-      
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-      - uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: '8.5'
-          cache-disabled: true
-      
-      - run: gradle wrapper
-      - run: chmod +x gradlew
-      - run: ./gradlew build --no-daemon
-      
-      - name: Prepare and compress
-        run: |
-          mkdir -p artifacts
-          find . -path "*/build/outputs/*" -type f -exec cp --parents {} artifacts/ \;
-          find . -path "*/build/libs/*" -type f -exec cp --parents {} artifacts/ \;
-          tar -c --use-compress-program="zstd -T0 -10" -f build-artifacts.tar.zst artifacts/
-      
-      - name: Set artifact name
-        id: set-name
-        run: echo "artifact-name=build-$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-      
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.set-name.outputs.artifact-name }}
-          path: build-artifacts.tar.zst
-          compression-level: 0
-          retention-days: 30
-
-  upload:
-    needs: build
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')  # 只在 tag 推送时上传
+    - uses: actions/checkout@v4
     
-    steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ needs.build.outputs.artifact-name }}
-          path: ./downloaded
-      
-      - name: Extract files
-        run: |
-          tar -xf ./downloaded/build-artifacts.tar.zst
-          mkdir release
-          find artifacts -name "*.apk" -exec cp {} release/ \;
-          find artifacts -name "*.aab" -exec cp {} release/ \;
-          find artifacts -name "*.aar" -exec cp {} release/ \;
-      
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: release/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+    
+    - name: Create libs directory and download Xposed API
+      run: |
+        mkdir -p app/libs
+        curl -L -o app/libs/api-82.jar "https://github.com/rovo89/XposedBridge/raw/master/app/src/main/assets/XposedBridge-api-82.jar" || \
+        echo "Warning: Failed to download, please check if file exists manually"
+    
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+    
+    - name: Build with Gradle
+      run: ./gradlew build --no-daemon
+    
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      if: success()
+      with:
+        name: app-debug
+        path: app/build/outputs/apk/debug/*.apk
