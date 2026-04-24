@@ -16,9 +16,9 @@ dependencyResolutionManagement {
             url = uri("https://api.xposed.info/repo")
         }
         // 可选：添加 JitPack 以备不时之需
-        maven {
-            url = uri("https://jitpack.io")
-        }
+//        maven {
+//            url = uri("https://jitpack.io")
+//        }
     }
 }
 
