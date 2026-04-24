@@ -58,8 +58,8 @@ dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
 
     // Xposed API
-    compileOnly("de.robv.android.xposed:api:82")
-    compileOnly("de.robv.android.xposed:api:82:sources")
+    compileOnly("de.robv.android.xposed:api:89")
+    compileOnly("de.robv.android.xposed:api:89:sources")
 
     // Hook 目标（仅编译引用）
     compileOnly("com.squareup.okhttp3:okhttp:4.12.0")
