@@ -39,6 +39,15 @@ android {
     }
 }
 
+// 添加仓库配置
+repositories {
+    google()
+    mavenCentral()
+    maven {
+        url = uri("https://api.xposed.info/repo")
+    }
+}
+
 dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
