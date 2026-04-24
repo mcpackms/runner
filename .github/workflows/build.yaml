@@ -1,4 +1,4 @@
-name: Build, Cache and Upload
+name: Build and Cache
 
 on:
   push:
@@ -23,12 +23,12 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # 3. 设置 Gradle 并自动缓存依赖
+      # 3. 设置 Gradle（禁用缓存避免服务端错误）
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.5'
-          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master' }}
+          cache-disabled: true  # 禁用缓存
 
       # 4. 生成 Gradle Wrapper
       - name: Generate Gradle Wrapper
@@ -38,24 +38,18 @@ jobs:
       - name: Grant execute permission
         run: chmod +x gradlew
 
-      # 6. 使用 Gradle 构建
-      - name: Build with Gradle
+      # 6. 构建项目
+      - name: Build project
         run: ./gradlew build --no-daemon
 
-      # 7. 使用 Gradle 打包产物（如果项目有自定义任务）
-      # 或者直接压缩 Gradle 生成的输出目录
-      - name: Prepare artifacts
+      # 7. 收集构建产物
+      - name: Collect artifacts
         run: |
-          # 创建产物目录
           mkdir -p artifacts
-          
-          # 使用 Gradle 的依赖任务复制产物（推荐）
-          ./gradlew copyArtifacts -PoutputDir=artifacts || \
-          # 备选：直接复制 Gradle 生成的产物
-          cp -r app/build/outputs artifacts/ 2>/dev/null || true
-          cp -r module/build/outputs artifacts/ 2>/dev/null || true
-          cp -r app/build/libs artifacts/ 2>/dev/null || true
-          cp -r module/build/libs artifacts/ 2>/dev/null || true
+          # 复制所有构建产物
+          find . -path "*/build/outputs/*" -type f -exec cp --parents {} artifacts/ \;
+          find . -path "*/build/libs/*" -type f -exec cp --parents {} artifacts/ \;
+          find . -path "*/build/reports/*" -type f -exec cp --parents {} artifacts/ \;
 
       # 8. 压缩为 tar.zst
       - name: Compress with tar.zst
@@ -65,10 +59,20 @@ jobs:
             artifacts/
 
       # 9. 上传压缩包
-      - name: Upload compressed artifacts
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-artifacts
           path: build-artifacts.tar.zst
           compression-level: 0
           retention-days: 90
+
+      # 10. 可选：单独上传 APK（方便直接下载）
+      - name: Upload APK files
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-files
+          path: |
+            **/build/outputs/apk/**/*.apk
+          if-no-files-found: warn
