@@ -39,15 +39,6 @@ android {
     }
 }
 
-// 删除这个 repositories 块！因为 settings.gradle.kts 已经统一管理了
-// repositories {
-//     google()
-//     mavenCentral()
-//     maven {
-//         url = uri("https://api.xposed.info/repo")
-//     }
-// }
-
 dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
@@ -58,8 +49,8 @@ dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
 
     // Xposed API
-    compileOnly("de.robv.android.xposed:api:89")
-    compileOnly("de.robv.android.xposed:api:89:sources")
+    compileOnly("de.robv.android.xposed:api:82")
+    compileOnly("de.robv.android.xposed:api:82:sources")
 
     // Hook 目标（仅编译引用）
     compileOnly("com.squareup.okhttp3:okhttp:4.12.0")
