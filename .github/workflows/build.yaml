@@ -21,44 +21,15 @@ jobs:
     - name: Create libs directory and download Xposed API
       run: |
         mkdir -p app/libs
-        curl -L -o app/libs/api-82.jar "https://github.com/rovo89/XposedBridge/raw/master/app/src/main/assets/XposedBridge-api-82.jar" || \
-        echo "Warning: Failed to download, please check if file exists manually"
+        curl -L -o app/libs/api-82.jar "https://github.com/rovo89/XposedBridge/raw/master/app/src/main/assets/XposedBridge-api-82.jar"
     
-    - name: Setup Gradle Wrapper
-      run: |
-        # 先创建 gradle wrapper 目录
-        mkdir -p gradle/wrapper
-        
-        # 直接下载 gradle-wrapper.jar（如果本地没有）
-        if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
-          curl -L -o gradle/wrapper/gradle-wrapper.jar "https://raw.githubusercontent.com/gradle/gradle/v8.7.0/gradle/wrapper/gradle-wrapper.jar"
-        fi
-        
-        # 创建 gradle-wrapper.properties
-        cat > gradle/wrapper/gradle-wrapper.properties << EOF
-distributionBase=GRADLE_USER_HOME
-distributionPath=wrapper/dists
-distributionUrl=https\://services.gradle.org/distributions/gradle-8.7-bin.zip
-zipStoreBase=GRADLE_USER_HOME
-zipStorePath=wrapper/dists
-EOF
-        
-        # 创建 gradlew 脚本
-        cat > gradlew << 'EOF'
-#!/bin/sh
-GRADLE_WRAPPER_JAR="gradle/wrapper/gradle-wrapper.jar"
-exec java -jar "$GRADLE_WRAPPER_JAR" "$@"
-EOF
-        
-        # 给 gradlew 执行权限
-        chmod +x gradlew
-        
-        # 验证 wrapper
-        ls -la gradle/wrapper/
-        cat gradle/wrapper/gradle-wrapper.properties
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v3
+      with:
+        gradle-version: '8.7'
     
     - name: Build with Gradle
-      run: ./gradlew build --no-daemon --stacktrace
+      run: ./gradlew build --no-daemon
     
     - name: Upload APK
       uses: actions/upload-artifact@v4
